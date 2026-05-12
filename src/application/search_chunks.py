@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections import Counter
+
 import numpy as np
 
 from src.config_loader import load_config
@@ -91,12 +93,24 @@ class SearchChunks:
 
         selected: list[int] = []
         candidates = list(range(len(results)))
+        doc_count: Counter[str] = Counter()
+
+        # Cap por documento: no máximo (top_k - 1) chunks do mesmo documento.
+        # Garante que quando o pool contém 2+ documentos, ao menos 2 aparecem
+        # no resultado — necessário porque o PDF maior (desenvolvimento, 3.8 MB)
+        # domina o top-20 FAISS com 19/20 chunks, bloqueando diversidade multi-doc.
+        # Fallback sem cap (linha abaixo do loop) preserva corretude quando
+        # todos os candidatos elegíveis se esgotam antes de preencher top_k.
+        max_per_doc: int = max(1, top_k - 1)
 
         while len(selected) < top_k and candidates:
             best_idx: int = candidates[0]
             best_score = float("-inf")
 
             for i in candidates:
+                if doc_count[results[i].chunk.document_id] >= max_per_doc:
+                    continue  # documento já atingiu o limite; tenta próximo
+
                 relevance = results[i].score  # cosine sim via FAISS inner product
 
                 if not selected:
@@ -111,6 +125,12 @@ class SearchChunks:
                     best_score = mmr_score
                     best_idx = i
 
+            if best_score == float("-inf"):
+                # todos os candidatos restantes atingiram o cap — relaxa e pega
+                # o de maior relevância para não desperdiçar slots de resultado
+                best_idx = max(candidates, key=lambda i: results[i].score)
+
+            doc_count[results[best_idx].chunk.document_id] += 1
             selected.append(best_idx)
             candidates.remove(best_idx)
 

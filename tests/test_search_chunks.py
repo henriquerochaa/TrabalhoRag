@@ -137,7 +137,7 @@ class TestRerankerChangesOrder:
 
 class TestOutOfScope:
     def test_score_below_threshold_returns_empty_and_flag(self) -> None:
-        # 0.30 < 0.65 (min_score_threshold do config.yaml)
+        # 0.30 < 0.84 (min_score_threshold do config.yaml — calibrado para multilingual-e5-large)
         class LowStore(VectorStorePort):
             def add(self, c, e): pass
             def search(self, emb, top_k):
@@ -157,11 +157,11 @@ class TestOutOfScope:
         assert out_of_scope is True
 
     def test_score_just_below_threshold(self) -> None:
-        # 0.64 < 0.65 — borda inferior: deve ser out_of_scope
+        # 0.83 < 0.84 — borda inferior: deve ser out_of_scope
         class BorderStore(VectorStorePort):
             def add(self, c, e): pass
             def search(self, emb, top_k):
-                return [SearchResult(_chunk("border"), score=0.64)]
+                return [SearchResult(_chunk("border"), score=0.83)]
             def save(self, p): pass
             def load(self, p): pass
 
@@ -176,13 +176,13 @@ class TestOutOfScope:
 
 class TestInScope:
     def test_score_above_threshold_returns_chunks(self) -> None:
-        # 0.80 >= 0.65 → in scope, lista não vazia
+        # 0.85 >= 0.84 → in scope, lista não vazia
         target = _chunk("alvo", "O Paraná é a quinta maior economia do Brasil.")
 
         class AboveStore(VectorStorePort):
             def add(self, c, e): pass
             def search(self, emb, top_k):
-                return [SearchResult(target, score=0.80)]
+                return [SearchResult(target, score=0.85)]
             def save(self, p): pass
             def load(self, p): pass
 
@@ -193,11 +193,11 @@ class TestInScope:
         assert chunks[0].id == "alvo"
 
     def test_score_exactly_at_threshold_is_in_scope(self) -> None:
-        # código usa `< threshold` (estrito): score == 0.65 é in scope
+        # código usa `< threshold` (estrito): score == 0.84 é in scope
         class AtStore(VectorStorePort):
             def add(self, c, e): pass
             def search(self, emb, top_k):
-                return [SearchResult(_chunk("at"), score=0.65)]
+                return [SearchResult(_chunk("at"), score=0.84)]
             def save(self, p): pass
             def load(self, p): pass
 

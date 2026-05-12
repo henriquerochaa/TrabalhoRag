@@ -14,7 +14,7 @@ transformers==5.8.0
 torch==2.11.0
 
 # --- Índice vetorial ---
-faiss-cpu==1.13.2
+faiss-cpu==1.7.4
 
 # --- Armazenamento (SQLite via stdlib) ---
 # sqlite3 é built-in do Python — sem dependência extra

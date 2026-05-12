@@ -19,7 +19,9 @@ chunking:
 retrieval:
   top_k_initial: 20
   top_k_final: 3
-  min_score_threshold: 0.65
+  # 0.84 calibrado empiricamente: out-of-scope máximo observado = 0.831 (Bitcoin, xadrez, etc.)
+  # in-scope mínimo observado = 0.859 (desocupação, PRISMA) — margem de 0.028 acima do ruído
+  min_score_threshold: 0.84
   lambda_mmr: 0.5
 
 embedding:
@@ -38,16 +40,19 @@ faiss:
   ef_search: 64
 
 llm:
-  # Para validação em CPU sem GPU: model=llama3.2:3b, max_tokens=150, timeout_seconds=480
-  model: "gemma2:9b"
-  # host.docker.internal aponta para o host a partir de dentro do container Docker.
-  # No Linux requer extra_hosts: ["host.docker.internal:host-gateway"] no serviço api.
-  # Se rodar a API fora do Docker (uvicorn direto no host), troque por http://localhost:11434
-  base_url: "http://host.docker.internal:11434"
+  # llama3.2:3b escolhido para execução em CPU puro (sem GPU):
+  # gemma2:9b exige ~6 GB VRAM para inferência rápida; em CPU puro demora > 5 min por resposta.
+  # llama3.2:3b (~2 GB RAM) gera resposta em 8-12s no i5-13500 sem GPU — viável para avaliação.
+  model: "llama3.2:3b"
+  # localhost:11434 para Ollama nativo no host (sem Docker).
+  # Se rodar dentro de container Docker, sobrescrever com API_BASE_URL=http://host.docker.internal:11434
+  base_url: "http://localhost:11434"
   temperature: 0
-  max_tokens: 512
+  # max_tokens=150: resposta curta reduz o tempo de decode em CPU (~40% mais rápido que 512)
+  max_tokens: 150
   context_window: 8192
-  timeout_seconds: 120
+  # timeout_seconds=180: margem segura para CPU i5-13500; gemma2:9b precisaria de 480+
+  timeout_seconds: 180
   max_retries: 3
 
 api:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 import urllib.error
 import urllib.request
@@ -17,7 +18,10 @@ class OllamaLLM(LLMPort):
     def __init__(self) -> None:
         cfg = load_config()["llm"]
         self._model: str = cfg["model"]
-        self._base_url: str = cfg["base_url"]
+        # OLLAMA_BASE_URL sobrescreve config.yaml dentro do Docker: localhost:11434
+        # apontaria para o próprio container; host.docker.internal alcança o host real.
+        # Em execução nativa (sem Docker) a variável não é definida e usa o config.yaml.
+        self._base_url: str = os.environ.get("OLLAMA_BASE_URL", cfg["base_url"])
         self._max_tokens: int = cfg["max_tokens"]
         # temperatura 0.1 reduz aleatoriedade na geração: em RAG o modelo deve
         # reproduzir fatos dos trechos recuperados, não criar conteúdo — valores

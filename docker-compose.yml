@@ -9,7 +9,7 @@ services:
     ports:
       - "11434:11434"
     volumes:
-      # bind mount evita rebaixar o gemma2:9b (5 GB) a cada restart;
+      # bind mount evita rebaixar o llama3.2:3b (~2 GB) a cada restart;
       # o modelo fica em models/ollama junto com os demais artefatos do projeto
       - ./models/ollama:/root/.ollama
     healthcheck:
@@ -33,6 +33,9 @@ services:
       # aponta para o volume montado em vez do cache padrão ~/.cache/huggingface
       - SENTENCE_TRANSFORMERS_HOME=/app/models
       - TRANSFORMERS_CACHE=/app/models
+      # dentro do container, localhost seria o próprio container — host.docker.internal
+      # aponta para o host onde o Ollama está rodando (nativo ou via --profile full)
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
     volumes:
       - ./models:/app/models
       - ./data:/app/data

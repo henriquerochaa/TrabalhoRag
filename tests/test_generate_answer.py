@@ -101,23 +101,23 @@ class TestOutOfScope:
 
 class TestPromptUsed:
     def test_prompt_used_is_nonempty(self) -> None:
-        ans = _make_ga([(_chunk("ok"), 0.80)]).execute("Qual o PIB do Paraná?")
+        ans = _make_ga([(_chunk("ok"), 0.85)]).execute("Qual o PIB do Paraná?")
         assert ans.prompt_used != ""
 
     def test_prompt_used_contains_query(self) -> None:
         # A query deve aparecer literalmente no prompt para que a LLM responda
         # à pergunta correta — modelos pequenos seguem o texto do prompt, não inferem.
         query = "Qual o crescimento do PIB do Paraná em 2024?"
-        ans = _make_ga([(_chunk("ok", "O PIB cresceu 4%."), 0.80)]).execute(query)
+        ans = _make_ga([(_chunk("ok", "O PIB cresceu 4%."), 0.85)]).execute(query)
         assert query in ans.prompt_used
 
     def test_prompt_used_contains_chunk_text(self) -> None:
         chunk_text = "A taxa de desemprego caiu para 6% em 2024, menor que a média nacional."
-        ans = _make_ga([(_chunk("ok", chunk_text), 0.80)]).execute("Desemprego no Paraná?")
+        ans = _make_ga([(_chunk("ok", chunk_text), 0.85)]).execute("Desemprego no Paraná?")
         assert chunk_text in ans.prompt_used
 
     def test_out_of_scope_false_for_covered_question(self) -> None:
-        ans = _make_ga([(_chunk("ok"), 0.80)]).execute("Qual o PIB do Paraná?")
+        ans = _make_ga([(_chunk("ok"), 0.85)]).execute("Qual o PIB do Paraná?")
         assert ans.out_of_scope is False
 
 
@@ -138,16 +138,16 @@ class TestSources:
             )
 
     def test_chunk_dropped_by_tight_budget_not_in_sources(self) -> None:
-        # 3 chunks de 2000 chars → 511 tokens cada (medido: block=2047 chars).
-        # skeleton ≈ 105 tokens; budget=650 → chunk_budget=545.
-        # 1 chunk (511) cabe; 2 (1022) não cabem → rank1 e rank2 devem ser descartados.
+        # 3 chunks de 2000 chars → _MAX_CHUNK_CHARS=250 trunca o texto → block=297 chars → 74 tokens.
+        # skeleton=105 tokens; budget=210 → chunk_budget=105.
+        # 1 chunk (74 tokens) cabe; 2 chunks (148 tokens) não cabem → rank1 e rank2 descartados.
         text = "P" * 2000
         c0 = _chunk("rank0", text)
         c1 = _chunk("rank1", text)
         c2 = _chunk("rank2", text)
 
         pb = PromptBuilder()
-        pb._input_budget = 650
+        pb._input_budget = 210
 
         ans = _make_ga([(c0, 0.90), (c1, 0.80), (c2, 0.70)], pb=pb).execute("query")
 
