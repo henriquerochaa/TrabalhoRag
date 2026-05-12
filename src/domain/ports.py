@@ -22,7 +22,14 @@ class ChunkerPort(ABC):
 class EmbedderPort(ABC):
     @abstractmethod
     def embed(self, texts: list[str]) -> np.ndarray:
-        # retorna matriz (N, dim) — cada linha é o embedding de um texto
+        # retorna matriz (N, dim) para passagens (chunks)
+        ...
+
+    @abstractmethod
+    def embed_queries(self, texts: list[str]) -> np.ndarray:
+        # retorna matriz (N, dim) para queries de busca
+        # separado de embed() porque modelos como e5 exigem prefixos distintos
+        # ("query:" vs "passage:") — unificar os dois quebraria a semântica
         ...
 
 
@@ -54,11 +61,24 @@ class MetadataStorePort(ABC):
         ...
 
     @abstractmethod
+    def document_exists(self, document_id: str) -> bool:
+        # verifica se ao menos um chunk do documento já foi indexado —
+        # usado pelo IngestDocuments para garantir idempotência por documento
+        ...
+
+    @abstractmethod
     def save(self, path: str) -> None:
         ...
 
     @abstractmethod
     def load(self, path: str) -> None:
+        ...
+
+
+class RerankerPort(ABC):
+    @abstractmethod
+    def rerank(self, query: str, chunks: list[Chunk]) -> list[Chunk]:
+        # retorna os mesmos chunks reordenados do mais ao menos relevante
         ...
 
 

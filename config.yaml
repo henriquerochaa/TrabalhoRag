@@ -11,21 +11,44 @@ paths:
 chunking:
   chunk_size: 512
   overlap: 64
+  # linhas repetidas em >= threshold_ratio das páginas são descartadas como cabeçalho/rodapé
+  header_frequency_threshold: 0.30
+  # linhas com menos chars que este valor são artefatos de paginação nos PDFs do IPARDES
+  min_line_chars: 20
 
 retrieval:
   top_k_initial: 20
-  top_k_final: 5
+  top_k_final: 3
   min_score_threshold: 0.65
+  lambda_mmr: 0.5
 
 embedding:
   model_name: "intfloat/multilingual-e5-large"
+  batch_size: 32
 
 reranker:
   model_name: "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
+faiss:
+  # M=32: ponto de equilíbrio recall/RAM para corpus pequeno (~5 000 chunks)
+  m: 32
+  # ef_construction=200: valor padrão recomendado — grafo de qualidade sem overhead excessivo
+  ef_construction: 200
+  # ef_search=64: troca recall por latência; aumentar para 128 melhora ~1% recall a 2x custo
+  ef_search: 64
+
 llm:
+  # Para validação em CPU sem GPU: model=llama3.2:3b, max_tokens=150, timeout_seconds=480
   model: "gemma2:9b"
-  base_url: "http://localhost:11434"
-  temperature: 0.1
-  max_tokens: 1024
+  # host.docker.internal aponta para o host a partir de dentro do container Docker.
+  # No Linux requer extra_hosts: ["host.docker.internal:host-gateway"] no serviço api.
+  # Se rodar a API fora do Docker (uvicorn direto no host), troque por http://localhost:11434
+  base_url: "http://host.docker.internal:11434"
+  temperature: 0
+  max_tokens: 512
   context_window: 8192
+  timeout_seconds: 120
+  max_retries: 3
+
+api:
+  base_url: "http://localhost:8000"

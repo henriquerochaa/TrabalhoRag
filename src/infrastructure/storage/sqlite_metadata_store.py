@@ -96,6 +96,15 @@ class SQLiteMetadataStore(MetadataStorePort):
     def get_chunk(self, chunk_id: str) -> Chunk | None:
         return self.get_by_id(chunk_id)
 
+    def document_exists(self, document_id: str) -> bool:
+        # EXISTS encerra na primeira linha encontrada — mais eficiente que COUNT(*)
+        # para verificar presença sem carregar todos os chunks do documento
+        cur = self._conn.execute(
+            "SELECT EXISTS(SELECT 1 FROM chunks WHERE document_id = ? LIMIT 1)",
+            (document_id,),
+        )
+        return bool(cur.fetchone()[0])
+
     def save(self, path: str) -> None:
         # SQLite persiste em disco automaticamente — commit garante flush
         self._conn.commit()

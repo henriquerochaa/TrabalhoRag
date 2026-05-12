@@ -1,0 +1,37 @@
+# --- Extração de PDF ---
+PyMuPDF==1.27.2.3
+
+# --- Chunking e NLP ---
+spacy==3.8.14
+# modelo pt_core_news_lg instalado separadamente: python -m spacy download pt_core_news_lg
+
+# --- Embeddings e reranker (HuggingFace) ---
+sentence-transformers==5.4.1
+transformers==5.8.0
+# torch CPU-only reduz o download de ~2 GB para ~200 MB:
+#   pip install torch==2.11.0 --index-url https://download.pytorch.org/whl/cpu
+# Para GPU (CUDA) usar o valor padrão abaixo:
+torch==2.11.0
+
+# --- Índice vetorial ---
+faiss-cpu==1.13.2
+
+# --- Armazenamento (SQLite via stdlib) ---
+# sqlite3 é built-in do Python — sem dependência extra
+
+# --- API ---
+fastapi==0.136.1
+pydantic==2.13.4
+uvicorn[standard]>=0.29.0
+
+# --- Interface Streamlit ---
+streamlit>=1.35.0
+
+# --- Configuração ---
+PyYAML==6.0.3
+
+# --- Utilitários ---
+numpy==2.4.4
+
+# --- Testes ---
+pytest==9.0.3

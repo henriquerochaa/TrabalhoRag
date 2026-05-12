@@ -4,14 +4,17 @@ import re
 from collections import Counter
 
 
-def remove_repeated_headers(pages: list[tuple[int, str]]) -> list[tuple[int, str]]:
-    # linhas que aparecem em mais de 30% das páginas são cabeçalhos/rodapés —
-    # threshold empírico: baixo demais remove conteúdo legítimo repetido,
+def remove_repeated_headers(
+    pages: list[tuple[int, str]],
+    threshold_ratio: float = 0.30,
+) -> list[tuple[int, str]]:
+    # threshold_ratio vem de config.yaml (chunking.header_frequency_threshold);
+    # o default 0.30 é empírico: baixo demais remove conteúdo legítimo repetido,
     # alto demais deixa ruído de paginação nos chunks
     if not pages:
         return pages
 
-    threshold = max(2, int(len(pages) * 0.30))
+    threshold = max(2, int(len(pages) * threshold_ratio))
     all_lines = [line.strip() for _, text in pages for line in text.splitlines()]
     counts = Counter(all_lines)
     repeated = {line for line, n in counts.items() if n >= threshold and line}
@@ -38,8 +41,9 @@ def normalize_whitespace(text: str) -> str:
 
 
 def filter_low_density_lines(text: str, min_chars: int = 20) -> str:
-    # linhas curtas em PDFs governamentais são quase sempre numeração de página,
-    # títulos de seção isolados ou artefatos de tabela — descartá-las reduz ruído
-    # sem perder conteúdo semântico relevante para RAG
+    # min_chars vem de config.yaml (chunking.min_line_chars); linhas curtas em
+    # PDFs governamentais são quase sempre numeração de página, títulos de seção
+    # isolados ou artefatos de tabela — descartá-las reduz ruído sem perder
+    # conteúdo semântico relevante para RAG
     lines = [line for line in text.splitlines() if len(line.strip()) >= min_chars]
     return "\n".join(lines)

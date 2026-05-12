@@ -16,6 +16,9 @@ class Chunk:
     page: int
     section: str
     position: int
+    # score padrão 0.0: chunks criados no ingest não têm score de retrieval;
+    # o valor real é atribuído por SearchChunks.execute() após a busca FAISS
+    score: float = 0.0
 
 
 @dataclass

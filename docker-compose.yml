@@ -1,11 +1,16 @@
 services:
+  # Perfil "full": sobe o Ollama dentro do Docker.
+  # Use quando NÃO há Ollama nativo no host: docker compose --profile full up
+  # Quando o Ollama nativo já está rodando na porta 11434, omita --profile full
+  # para evitar conflito de porta.
   ollama:
+    profiles: ["full"]
     image: ollama/ollama
     ports:
       - "11434:11434"
     volumes:
-      # bind mount em ./models/ollama evita rebaixar o gemma2:9b (5 GB) a cada
-      # restart — o modelo fica no repositório local junto com os demais artefatos
+      # bind mount evita rebaixar o gemma2:9b (5 GB) a cada restart;
+      # o modelo fica em models/ollama junto com os demais artefatos do projeto
       - ./models/ollama:/root/.ollama
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:11434/api/tags"]
@@ -13,4 +18,56 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+    restart: unless-stopped
+
+  api:
+    build: .
+    command: uvicorn src.interface.api:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    environment:
+      # bloqueia qualquer tentativa de download HuggingFace em runtime —
+      # falha imediata é preferível a chamada de rede silenciosa
+      - TRANSFORMERS_OFFLINE=1
+      - HF_DATASETS_OFFLINE=1
+      # aponta para o volume montado em vez do cache padrão ~/.cache/huggingface
+      - SENTENCE_TRANSFORMERS_HOME=/app/models
+      - TRANSFORMERS_CACHE=/app/models
+    volumes:
+      - ./models:/app/models
+      - ./data:/app/data
+      # config.yaml montado como volume para que mudanças no host não exijam rebuild
+      - ./config.yaml:/app/config.yaml
+    # host.docker.internal é o gateway para o host a partir de dentro do container.
+    # No Linux o nome não é resolvido automaticamente — extra_hosts injeta o mapeamento
+    # "host.docker.internal → IP do gateway Docker" em /etc/hosts do container.
+    # No Mac/Windows (Docker Desktop) isso é automático e extra_hosts é ignorado.
+    # Necessário para que a API alcance o Ollama rodando no host (nativo ou via --profile full,
+    # pois nesse caso a porta 11434 do container é publicada no host).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      # /health sempre retorna HTTP 200 assim que a API está de pé,
+      # independente de o índice ter sido gerado — garante que docker compose up
+      # nunca falha por falta de ingest.py.
+      # Usa Python em vez de curl porque python:3.11-slim não inclui curl.
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  app:
+    build: .
+    command: streamlit run src/interface/app.py --server.port 8501 --server.address 0.0.0.0
+    ports:
+      - "8501:8501"
+    environment:
+      # sobrescreve config.yaml: dentro do Docker, api é o hostname do serviço,
+      # não localhost (que seria o próprio container do Streamlit)
+      - API_BASE_URL=http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
     restart: unless-stopped

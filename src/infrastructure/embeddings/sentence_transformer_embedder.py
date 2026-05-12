@@ -27,7 +27,9 @@ class SentenceTransformerEmbedder(EmbedderPort):
     def __init__(self) -> None:
         cfg = load_config()
         models_path = cfg["paths"]["models"]
-        model_name: str = cfg["embedding"]["model_name"]
+        emb_cfg = cfg["embedding"]
+        model_name: str = emb_cfg["model_name"]
+        self._batch_size: int = emb_cfg["batch_size"]
 
         os.environ["SENTENCE_TRANSFORMERS_HOME"] = models_path
         os.environ["TRANSFORMERS_CACHE"] = models_path
@@ -50,6 +52,6 @@ class SentenceTransformerEmbedder(EmbedderPort):
         return self._model.encode(
             prefixed,
             normalize_embeddings=True,
-            batch_size=32,
+            batch_size=self._batch_size,
             show_progress_bar=False,
         )

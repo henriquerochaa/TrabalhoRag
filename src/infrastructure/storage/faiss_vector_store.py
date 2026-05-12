@@ -20,17 +20,18 @@ from src.infrastructure.config_loader import load_config
 # METRIC_INNER_PRODUCT exige vetores L2-normalizados (garantido pelo embedder),
 # tornando produto interno equivalente à similaridade de cosseno.
 
-_M = 32                  # conexões por camada — mais conexões = maior recall e maior RAM
-_EF_CONSTRUCTION = 200   # qualidade do grafo na indexação — valor padrão recomendado
-_EF_SEARCH = 64          # janela de busca — aumentar melhora recall a custo de latência
-
 _INDEX_FILE = "index.faiss"
 _IDMAP_FILE = "id_map.json"
 
 
 class FAISSVectorStore(VectorStorePort):
     def __init__(self, metadata_store: MetadataStorePort) -> None:
-        self._processed_dir = Path(load_config()["paths"]["processed"])
+        cfg = load_config()
+        self._processed_dir = Path(cfg["paths"]["processed"])
+        faiss_cfg = cfg["faiss"]
+        self._m: int = faiss_cfg["m"]
+        self._ef_construction: int = faiss_cfg["ef_construction"]
+        self._ef_search: int = faiss_cfg["ef_search"]
         self._metadata_store = metadata_store
         self._index: faiss.IndexHNSWFlat | None = None
         # mapeamento posição FAISS (int) → chunk_id (str), necessário pois
@@ -40,10 +41,10 @@ class FAISSVectorStore(VectorStorePort):
     def add(self, chunks: list[Chunk], embeddings: np.ndarray) -> None:
         dim = embeddings.shape[1]
         if self._index is None:
-            self._index = faiss.IndexHNSWFlat(dim, _M, faiss.METRIC_INNER_PRODUCT)
-            self._index.hnsw.efConstruction = _EF_CONSTRUCTION
+            self._index = faiss.IndexHNSWFlat(dim, self._m, faiss.METRIC_INNER_PRODUCT)
+            self._index.hnsw.efConstruction = self._ef_construction
 
-        self._index.hnsw.efSearch = _EF_SEARCH
+        self._index.hnsw.efSearch = self._ef_search
         self._index.add(embeddings.astype(np.float32))
         self._id_map.extend(c.id for c in chunks)
         self._metadata_store.save_chunks(chunks)
@@ -53,7 +54,7 @@ class FAISSVectorStore(VectorStorePort):
             return []
 
         query = query_embedding.reshape(1, -1).astype(np.float32)
-        self._index.hnsw.efSearch = _EF_SEARCH
+        self._index.hnsw.efSearch = self._ef_search
         scores, indices = self._index.search(query, top_k)
 
         results: list[SearchResult] = []
@@ -77,7 +78,7 @@ class FAISSVectorStore(VectorStorePort):
     def load(self, path: str) -> None:
         in_dir = Path(path)
         self._index = faiss.read_index(str(in_dir / _INDEX_FILE))
-        self._index.hnsw.efSearch = _EF_SEARCH
+        self._index.hnsw.efSearch = self._ef_search
         with open(in_dir / _IDMAP_FILE, encoding="utf-8") as f:
             self._id_map = json.load(f)
         self._metadata_store.load(path)
