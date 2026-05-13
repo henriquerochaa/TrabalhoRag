@@ -13,24 +13,35 @@ Após o setup, **nenhuma conexão de rede será feita em runtime**.
 # 1. Dependências Python
 pip install -r requirements.txt
 
-# 2. Modelo LLM local (gemma2:9b — ~5 GB)
+# 2. Modelo LLM local (llama3.2:3b — ~2 GB)
 #    Ollama deve estar instalado no host: https://ollama.com
-ollama pull gemma2:9b
+ollama pull llama3.2:3b
 
-# 3. Modelos de embedding e reranker (salvos em models/)
-python scripts/download_models.py
-
-# 4. Modelo de linguagem spaCy para português
+# 3. Modelo de linguagem spaCy para português
 python -m spacy download pt_core_news_lg
+
+# 4. Modelos de embedding e reranker (salvos em models/)
+python scripts/download_models.py
 
 # 5. PDFs do IPARDES (salvos em data/raw/)
 python scripts/download_pdfs.py
+
+# 6. Indexar os PDFs no FAISS (gera data/processed/)
+python ingest.py
 ```
 
-> **Torch CPU-only** (opcional, download menor):
+> **Torch CPU-only** (opcional, download menor ~200 MB):
 > ```bash
 > pip install torch==2.11.0 --index-url https://download.pytorch.org/whl/cpu
 > ```
+
+> **Atenção — hf-xet (AVX-512):** Se o comando `python scripts/download_models.py` terminar com
+> `Fatal Error: HW capability... HW capability requested: 0x200000`, remova o hf-xet:
+> ```bash
+> pip uninstall hf-xet -y
+> ```
+> O hf-xet é um acelerador de download opcional que exige AVX-512 (ausente no i5-13500).
+> Sem ele o download usa HTTP padrão e funciona normalmente.
 
 ---
 
@@ -75,25 +86,17 @@ O perfil `full` adiciona o container Ollama ao stack.
 docker compose --profile full up --build
 ```
 
-> **Atenção:** na primeira execução o container Ollama precisa baixar o modelo gemma2:9b (~5 GB).
+> **Atenção:** na primeira execução o container Ollama precisa baixar o modelo llama3.2:3b (~2 GB).
 > Aguarde o healthcheck do serviço `ollama` passar antes de fazer requisições.
 > Acompanhe com: `docker compose logs -f ollama`
 
 | Serviço  | Porta | Descrição                        |
 |----------|-------|----------------------------------|
-| `ollama` | 11434 | LLM gemma2:9b (container)        |
+| `ollama` | 11434 | LLM llama3.2:3b (container)      |
 | `api`    | 8000  | FastAPI — endpoint POST /chat    |
 | `app`    | 8501  | Streamlit — interface de usuário |
 
 ---
-
-### Indexar os PDFs (primeira execução ou após limpar processed/)
-
-```bash
-python ingest.py
-```
-
-Idempotente — documentos já indexados são ignorados.
 
 ### Acessar
 
