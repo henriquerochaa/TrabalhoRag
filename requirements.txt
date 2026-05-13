@@ -1,4 +1,4 @@
-# --- Extração de PDF ---
+﻿# --- Extração de PDF ---
 PyMuPDF==1.27.2.3
 
 # --- Chunking e NLP ---
@@ -6,7 +6,7 @@ spacy==3.8.14
 # modelo pt_core_news_lg instalado separadamente: python -m spacy download pt_core_news_lg
 
 # --- Embeddings e reranker (HuggingFace) ---
-sentence-transformers==5.4.1
+sentence-transformers==5.5.0
 transformers==5.8.0
 # torch CPU-only reduz o download de ~2 GB para ~200 MB:
 #   pip install torch==2.11.0 --index-url https://download.pytorch.org/whl/cpu
@@ -14,7 +14,10 @@ transformers==5.8.0
 torch==2.11.0
 
 # --- Índice vetorial ---
-faiss-cpu==1.7.4
+# faiss-cpu==1.7.4 não está mais disponível no PyPI (versão mínima atual: 1.8.0)
+# faiss-cpu==1.8.0 requer AVX-512 (inexistente no i5-13500 do professor)
+# faiss-cpu==1.9.0: primeira versão compatível com numpy>=2.0 e sem exigência de AVX-512
+faiss-cpu==1.9.0
 
 # --- Armazenamento (SQLite via stdlib) ---
 # sqlite3 é built-in do Python — sem dependência extra
