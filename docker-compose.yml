@@ -13,12 +13,25 @@ services:
       # o modelo fica em models/ollama junto com os demais artefatos do projeto
       - ./models/ollama:/root/.ollama
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:11434/api/tags"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 20s
+      retries: 10
+      start_period: 30s
     restart: unless-stopped
+
+  # Puxa llama3.2:3b automaticamente na primeira vez que o perfil "full" é usado.
+  # Executa uma única vez (restart: "no") após o Ollama estar saudável.
+  ollama-init:
+    profiles: ["full"]
+    image: ollama/ollama
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    entrypoint: ["ollama", "pull", "llama3.2:3b"]
+    restart: "no"
 
   api:
     build: .

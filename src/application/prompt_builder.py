@@ -1,7 +1,18 @@
 from __future__ import annotations
 
+import hashlib
+
 from src.config_loader import load_config
 from src.domain.entities import Chunk
+
+
+def _build_filename_map(cfg: dict) -> dict[str, str]:
+    # Reconstrói o mapeamento document_id → filename do IngestDocuments
+    # para exibir nomes legíveis no prompt enviado à LLM.
+    return {
+        hashlib.md5(e["filename"].encode()).hexdigest(): e["filename"]
+        for e in cfg["pdfs"]
+    }
 
 # Instruções restritivas explícitas são necessárias para controlar alucinação
 # em modelos <= 9.9B por três razões:
@@ -46,20 +57,6 @@ def _estimate_tokens(text: str) -> int:
 _MAX_CHUNK_CHARS = 250
 
 
-def _format_chunk(index: int, chunk: Chunk) -> str:
-    section_part = f" | Seção: {chunk.section}" if chunk.section else ""
-    # Primeiros 250 chars concentram a informação mais densa do chunk.
-    # Limite necessário para viabilizar execução em CPU sem GPU: chunks completos
-    # de 512 tokens forçariam num_predict > 512 para cobrir contexto + resposta,
-    # tornando cada query inviável (> 256 s de geração observados em benchmarks).
-    text = chunk.text[:_MAX_CHUNK_CHARS]
-    return (
-        f"\n--- Trecho {index} ---\n"
-        f"Documento: {chunk.document_id} | Página: {chunk.page}{section_part}\n\n"
-        f"{text}\n"
-    )
-
-
 class PromptBuilder:
     def __init__(self) -> None:
         cfg = load_config()
@@ -72,6 +69,24 @@ class PromptBuilder:
         # cabeçalhos, query) ainda não foi descontado — PromptBuilder descarta
         # chunks adicionais se necessário para acomodar esse overhead.
         self._input_budget: int = self._context_window - self._max_tokens
+        # Mapeamento document_id (MD5) → filename legível para exibição no prompt.
+        # Essencial para rastreabilidade: o professor verifica QUAL documento gerou
+        # cada trecho no prompt_used — hash MD5 não é auditável sem esse mapa.
+        self._filename_map: dict[str, str] = _build_filename_map(cfg)
+
+    def _format_chunk(self, index: int, chunk: Chunk) -> str:
+        section_part = f" | Seção: {chunk.section}" if chunk.section else ""
+        filename = self._filename_map.get(chunk.document_id, chunk.document_id)
+        # Primeiros 250 chars concentram a informação mais densa do chunk.
+        # Limite necessário para viabilizar execução em CPU sem GPU: chunks completos
+        # de 512 tokens forçariam num_predict > 512 para cobrir contexto + resposta,
+        # tornando cada query inviável (> 256 s de geração observados em benchmarks).
+        text = chunk.text[:_MAX_CHUNK_CHARS]
+        return (
+            f"\n--- Trecho {index} ---\n"
+            f"Documento: {filename} | Página: {chunk.page}{section_part}\n\n"
+            f"{text}\n"
+        )
 
     def build(self, query: str, chunks: list[Chunk]) -> tuple[str, list[Chunk]]:
         """Monta o prompt final e retorna (prompt, chunks_efetivamente_usados).
@@ -87,14 +102,14 @@ class PromptBuilder:
         tokens_used = 0
 
         for i, chunk in enumerate(chunks):
-            block = _format_chunk(i + 1, chunk)
+            block = self._format_chunk(i + 1, chunk)
             block_tokens = _estimate_tokens(block)
             if tokens_used + block_tokens > chunk_budget:
                 break
             used.append(chunk)
             tokens_used += block_tokens
 
-        context_block = "".join(_format_chunk(i + 1, c) for i, c in enumerate(used))
+        context_block = "".join(self._format_chunk(i + 1, c) for i, c in enumerate(used))
 
         prompt = (
             _INSTRUCTION

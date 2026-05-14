@@ -1,5 +1,14 @@
 from __future__ import annotations
 
+import hashlib
+import os
+
+# Define antes de qualquer import que carregue PyTorch/CUDA:
+# a API roda junto com o Ollama (que usa a GPU para llama3.2:3b).
+# Ocultar a GPU do PyTorch garante que o embedder e o reranker usem CPU,
+# deixando toda a VRAM livre para o Ollama — evita cudaMalloc OOM.
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+
 import threading
 import urllib.error
 import urllib.request
@@ -31,6 +40,7 @@ class ChatRequest(BaseModel):
 class SourceModel(BaseModel):
     id: str
     document_id: str
+    filename: str   # nome legível do PDF (ex: "analise_conjuntural_2025.pdf")
     page: int
     section: str
     score: float
@@ -44,6 +54,22 @@ class ChatResponse(BaseModel):
     prompt_used: str
     sources: list[SourceModel]
     out_of_scope: bool
+
+
+# ---------------------------------------------------------------------------
+# Mapeamento document_id → filename (derivado do config.yaml)
+# Permite exibir o nome legível do PDF nas fontes em vez do hash MD5.
+# ---------------------------------------------------------------------------
+
+def _build_filename_map() -> dict[str, str]:
+    cfg = load_config()
+    return {
+        hashlib.md5(e["filename"].encode()).hexdigest(): e["filename"]
+        for e in cfg["pdfs"]
+    }
+
+
+_FILENAME_MAP: dict[str, str] = _build_filename_map()
 
 
 # ---------------------------------------------------------------------------
@@ -154,6 +180,7 @@ def chat(request: ChatRequest) -> ChatResponse:
             SourceModel(
                 id=chunk.id,
                 document_id=chunk.document_id,
+                filename=_FILENAME_MAP.get(chunk.document_id, chunk.document_id),
                 page=chunk.page,
                 section=chunk.section,
                 score=chunk.score,

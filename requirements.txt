@@ -8,10 +8,12 @@ spacy==3.8.14
 # --- Embeddings e reranker (HuggingFace) ---
 sentence-transformers==5.5.0
 transformers==5.8.0
-# torch CPU-only reduz o download de ~2 GB para ~200 MB:
-#   pip install torch==2.11.0 --index-url https://download.pytorch.org/whl/cpu
-# Para GPU (CUDA) usar o valor padrão abaixo:
-torch==2.11.0
+# torch: sentence-transformers instala automaticamente a versão compatível.
+# Para CPU puro (professor/avaliador sem GPU) o download padrão inclui libs CUDA
+# desnecessárias (~2 GB). Alternativa leve (~200 MB):
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+# Deixamos sem pin de versão para garantir compatibilidade entre ambientes.
+torch>=2.0.0
 
 # --- Índice vetorial ---
 # faiss-cpu==1.7.4 não está mais disponível no PyPI (versão mínima atual: 1.8.0)

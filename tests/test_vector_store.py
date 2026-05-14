@@ -113,7 +113,7 @@ class TestScoreOrdering:
 
 class TestSaveLoad:
     def test_save_load_same_top1(self, store, monkeypatch) -> None:
-        vs, meta, tmp_path = store
+        vs, _, tmp_path = store
 
         embeddings = _make_embeddings(10, 16)
         chunks = _make_chunks(10)
@@ -262,6 +262,67 @@ _REFERENCE_PAIRS: list[tuple[str, str]] = [
 ]
 
 _SIMILARITY_THRESHOLD = 0.70
+
+
+# ---------------------------------------------------------------------------
+# SQLiteMetadataStore — métodos da implementação concreta não cobertos via Port
+# ---------------------------------------------------------------------------
+
+@pytest.fixture()
+def sqlite_store(tmp_path, monkeypatch):
+    cfg = {"paths": {"processed": str(tmp_path)}}
+    monkeypatch.setattr(
+        "src.infrastructure.storage.sqlite_metadata_store.load_config", lambda: cfg
+    )
+    return SQLiteMetadataStore()
+
+
+def _make_chunk(cid: str = "doc_1_0") -> Chunk:
+    return Chunk(id=cid, document_id="doc", text="texto do chunk", page=1, section="Seção", position=0)
+
+
+class TestSQLiteConcreteAPI:
+    def test_insert_chunk_persists_and_get_by_id_retrieves(self, sqlite_store) -> None:
+        chunk = _make_chunk("c1")
+        sqlite_store.insert_chunk(chunk)
+        result = sqlite_store.get_by_id("c1")
+        assert result is not None and result.id == "c1"
+
+    def test_insert_chunk_is_idempotent(self, sqlite_store) -> None:
+        # INSERT OR IGNORE — segunda inserção não gera erro nem duplicata
+        chunk = _make_chunk("c2")
+        sqlite_store.insert_chunk(chunk)
+        sqlite_store.insert_chunk(chunk)
+        result = sqlite_store.get_by_id("c2")
+        assert result is not None and result.id == "c2"
+
+    def test_get_by_id_returns_none_for_unknown(self, sqlite_store) -> None:
+        assert sqlite_store.get_by_id("inexistente") is None
+
+    def test_get_many_by_ids_returns_all_requested(self, sqlite_store) -> None:
+        chunks = [_make_chunk(f"m{i}") for i in range(3)]
+        sqlite_store.save_chunks(chunks)
+        result = sqlite_store.get_many_by_ids(["m0", "m2"])
+        ids = {c.id for c in result}
+        assert ids == {"m0", "m2"}
+
+    def test_get_many_by_ids_empty_input_returns_empty(self, sqlite_store) -> None:
+        assert sqlite_store.get_many_by_ids([]) == []
+
+    def test_load_reopens_database_and_data_persists(self, sqlite_store, tmp_path) -> None:
+        # salva um chunk, fecha e reabre a conexão via load() — dados devem persistir
+        chunk = _make_chunk("persist")
+        sqlite_store.insert_chunk(chunk)
+        sqlite_store.load(str(tmp_path))
+        result = sqlite_store.get_by_id("persist")
+        assert result is not None and result.id == "persist"
+
+    def test_document_exists_returns_true_when_present(self, sqlite_store) -> None:
+        sqlite_store.save_chunks([_make_chunk("doc_1_0")])
+        assert sqlite_store.document_exists("doc") is True
+
+    def test_document_exists_returns_false_when_absent(self, sqlite_store) -> None:
+        assert sqlite_store.document_exists("doc_inexistente") is False
 
 
 @pytest.mark.skipif(

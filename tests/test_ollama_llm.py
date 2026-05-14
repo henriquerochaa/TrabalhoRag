@@ -46,6 +46,8 @@ def llm(monkeypatch) -> OllamaLLM:
             # 3 tentativas: equilibra disponibilidade vs latência total.
             # backoff 1s→2s→falha dá ~3s de janela para recuperação transitória
             "max_retries": 3,
+            # context_window obrigatório: OllamaLLM envia num_ctx para evitar truncagem
+            "context_window": 8192,
         }
     }
     monkeypatch.setattr("src.infrastructure.llm.ollama_llm.load_config", lambda: cfg)
@@ -193,3 +195,40 @@ class TestGenerateAnswerFallback:
         ans = self._make_ga([(_chunk("low"), 0.10)]).execute("Capital da Alemanha?")
         assert ans.out_of_scope is True
         assert ans.text != _UNAVAILABLE_TEXT
+
+
+# ---------------------------------------------------------------------------
+# Respostas malformadas do Ollama
+# ---------------------------------------------------------------------------
+
+class TestMalformedResponse:
+    def test_json_missing_response_key_raises(self, llm: OllamaLLM) -> None:
+        # Ollama retorna JSON válido mas sem a chave "response" — KeyError deve propagar
+        # sem silêncio: melhor falha explícita do que retornar string vazia
+        body = json.dumps({"model": "llama3.2:3b", "done": True}).encode()
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = body
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+
+        with patch("urllib.request.urlopen", return_value=mock_resp), patch("time.sleep"):
+            with pytest.raises((KeyError, OllamaUnavailableError)):
+                llm.generate("prompt")
+
+    def test_invalid_json_raises(self, llm: OllamaLLM) -> None:
+        # corpo não é JSON válido — json.JSONDecodeError deve propagar sem tentar retry
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = b"not json {{{"
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+
+        with patch("urllib.request.urlopen", return_value=mock_resp), patch("time.sleep"):
+            with pytest.raises((json.JSONDecodeError, ValueError, OllamaUnavailableError)):
+                llm.generate("prompt")
+
+    def test_successful_response_returns_string(self, llm: OllamaLLM) -> None:
+        # caminho feliz: resposta completa retorna str com o texto gerado
+        with patch("urllib.request.urlopen", return_value=_make_response("Resposta final.")), \
+             patch("time.sleep"):
+            result = llm.generate("prompt")
+        assert isinstance(result, str) and result == "Resposta final."

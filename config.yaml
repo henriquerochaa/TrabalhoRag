@@ -26,7 +26,9 @@ retrieval:
 
 embedding:
   model_name: "intfloat/multilingual-e5-large"
-  batch_size: 32
+  # batch_size=64: GPU (RTX 3050) processa batches maiores sem overhead extra;
+  # em CPU puro o ganho é marginal mas não prejudica — mantém retrocompatibilidade.
+  batch_size: 64
 
 reranker:
   model_name: "cross-encoder/ms-marco-MiniLM-L-6-v2"

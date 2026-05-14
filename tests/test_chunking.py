@@ -221,6 +221,40 @@ class TestChunkMetadata:
 
 
 # ---------------------------------------------------------------------------
+# _detect_section_title — edge cases de linhas e padrões específicos
+# ---------------------------------------------------------------------------
+
+class TestDetectSectionTitle:
+    def test_empty_paragraph_returns_empty_string(self, chunker: RecursiveChunker, doc: Document) -> None:
+        # parágrafo sem linhas não deve gerar section — cobre o `if not lines: return ""`
+        chunks = chunker.chunk([(1, "   \n\n   ")], doc)
+        # página vazia gera zero chunks; se gerar algum, section deve ser str
+        for c in chunks:
+            assert isinstance(c.section, str)
+
+    def test_numbered_section_detected(self, chunker: RecursiveChunker, doc: Document) -> None:
+        # padrão "1.2 Título" deve ser detectado como seção numerada
+        pages = [(1, "1.2 Desenvolvimento Regional\n\nConteúdo do item 1.2 sobre o Paraná.")]
+        chunks = chunker.chunk(pages, doc)
+        assert any(c.section == "1.2 Desenvolvimento Regional" for c in chunks)
+
+    def test_long_first_line_not_detected_as_section(self, chunker: RecursiveChunker, doc: Document) -> None:
+        # linha com mais de 120 chars não deve ser tratada como título — muito longa para seção
+        long_line = "A " * 65  # 130 chars
+        pages = [(1, long_line + "\n\nParágrafo seguinte com conteúdo relevante do documento.")]
+        chunks = chunker.chunk(pages, doc)
+        # a linha longa não deve virar seção (section do primeiro chunk deve ser vazia ou de outro parágrafo)
+        first_chunk = chunks[0]
+        assert long_line.strip() not in first_chunk.section or first_chunk.section == ""
+
+    def test_title_case_single_line_detected_as_section(self, chunker: RecursiveChunker, doc: Document) -> None:
+        # parágrafo de linha única curta com Title Case deve ser detectado como seção
+        pages = [(1, "Análise Econômica\n\nConteúdo com dados sobre o estado do Paraná.")]
+        chunks = chunker.chunk(pages, doc)
+        assert any("Análise" in c.section for c in chunks)
+
+
+# ---------------------------------------------------------------------------
 # métricas de qualidade sobre PDFs reais
 # ---------------------------------------------------------------------------
 

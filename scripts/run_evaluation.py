@@ -282,6 +282,26 @@ def _verify_preconditions(cfg: dict) -> bool:
     return ok
 
 
+def _warmup_pipeline(api_base: str) -> None:
+    """Força o carregamento do pipeline (embedder + FAISS + reranker + Ollama) antes
+    da avaliação cronometrada.
+
+    Sem este aquecimento, a primeira pergunta absorve o tempo de inicialização a frio
+    (~60-90s para carregar multilingual-e5-large, ms-marco e o índice FAISS),
+    somado ao carregamento do llama3.2:3b no Ollama (~20s), facilmente excedendo
+    o timeout de 190s e causando falha espúria na primeira pergunta.
+    """
+    _log.info("Aquecendo pipeline (primeira carga pode levar até 120s)…")
+    t0 = time.monotonic()
+    try:
+        _call_chat(api_base, "Qual é a situação econômica do Paraná?", timeout=300)
+        elapsed = time.monotonic() - t0
+        _log.info("Pipeline pronto em %.1fs.", elapsed)
+    except (urllib.error.URLError, OSError) as exc:
+        elapsed = time.monotonic() - t0
+        _log.warning("Warmup falhou em %.1fs (%s) — avaliação pode ter timeout na pergunta 1.", elapsed, exc)
+
+
 def _run_ingest() -> None:
     ingest_path = _PROJECT_ROOT / "ingest.py"
     _log.info("Iniciando ingest.py...")
@@ -410,6 +430,8 @@ def main() -> None:
     if not _verify_preconditions(cfg):
         _log.error("Pré-condições não satisfeitas — abortando.")
         sys.exit(1)
+
+    _warmup_pipeline(api_base)
 
     results: list[dict] = []
     passed_total = 0

@@ -86,9 +86,8 @@ O perfil `full` adiciona o container Ollama ao stack.
 docker compose --profile full up --build
 ```
 
-> **Atenção:** na primeira execução o container Ollama precisa baixar o modelo llama3.2:3b (~2 GB).
-> Aguarde o healthcheck do serviço `ollama` passar antes de fazer requisições.
-> Acompanhe com: `docker compose logs -f ollama`
+> O serviço `ollama-init` baixa o modelo `llama3.2:3b` automaticamente assim que o Ollama estiver saudável.
+> Acompanhe o progresso com: `docker compose --profile full logs -f ollama-init`
 
 | Serviço  | Porta | Descrição                        |
 |----------|-------|----------------------------------|
@@ -213,3 +212,10 @@ entrega.zip
   README.md
   ingest.py
 ```
+
+> **Excluir do ZIP**: `models/xet/` (binário hf-xet com AVX-512 que trava o i5-13500),
+> `.venv/`, `__pycache__/`, `*.pyc` e `models/ollama/` (modelo LLM, ~2 GB — o professor baixa via `ollama pull`).
+
+> **Torch no ZIP**: não inclua o cache do pip. O professor instala `torch>=2.0.0` via
+> `pip install -r requirements.txt`. Para CPU puro sem download de 2 GB:
+> `pip install torch --index-url https://download.pytorch.org/whl/cpu`

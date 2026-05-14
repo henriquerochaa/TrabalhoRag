@@ -7,11 +7,11 @@ import os
 # em vez de fazer chamada de rede silenciosa, garantindo execução 100% offline
 os.environ["TRANSFORMERS_OFFLINE"] = "1"
 os.environ["HF_DATASETS_OFFLINE"] = "1"
-# Oculta a GPU do PyTorch: mesmo com device="cpu", PyTorch inicializa o runtime CUDA
-# e reserva memória pinned (CUDA_Host buffer) — isso impede o Ollama de alocar VRAM.
-# Com CUDA_VISIBLE_DEVICES="" o PyTorch opera 100% em CPU sem tocar na GPU,
-# deixando toda a VRAM livre para o Ollama usar o llama3.2:3b via GPU.
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
+# CUDA_VISIBLE_DEVICES NÃO é definido aqui — a política de GPU é decidida pelo chamador:
+#   api.py  → define CUDA_VISIBLE_DEVICES="" antes de qualquer import para manter a
+#             VRAM livre para o Ollama (llama3.2:3b) quando rodando em produção.
+#   ingest.py → não define CUDA_VISIBLE_DEVICES, então PyTorch usa GPU automaticamente,
+#               acelerando a geração de embeddings (~4× mais rápido que CPU).
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
@@ -39,10 +39,11 @@ class SentenceTransformerEmbedder(EmbedderPort):
         os.environ["SENTENCE_TRANSFORMERS_HOME"] = models_path
         os.environ["TRANSFORMERS_CACHE"] = models_path
 
-        # device="cpu" obrigatório: projeto roda em CPU puro (sem GPU).
-        # Sem esta flag, SentenceTransformer auto-detecta CUDA e ocupa toda a VRAM,
-        # impedindo o Ollama de alocar memória para o LLM → cudaMalloc OOM → HTTP 500.
-        self._model = SentenceTransformer(model_name, cache_folder=models_path, device="cpu")
+        # device=None: SentenceTransformer auto-detecta GPU/CPU via CUDA_VISIBLE_DEVICES.
+        # Quando api.py define CUDA_VISIBLE_DEVICES="" antes dos imports, PyTorch não enxerga
+        # nenhuma GPU e cai em CPU — mantendo a VRAM livre para o Ollama (llama3.2:3b).
+        # Quando ingest.py roda (sem CUDA_VISIBLE_DEVICES), a GPU é usada automaticamente.
+        self._model = SentenceTransformer(model_name, cache_folder=models_path)
 
     def embed(self, texts: list[str]) -> np.ndarray:
         """Embed passages (chunks) com prefixo exigido pelo e5."""

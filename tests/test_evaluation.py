@@ -8,11 +8,13 @@ Cobertura:
   Categoria A — por documento: verifica que a fonte retornada pertence ao PDF esperado
   Categoria B — fora do escopo: verifica anti-alucinação sem chamar a LLM
   Categoria C — multi-documento: verifica que a resposta cobre mais de um PDF
+  LLM real    — pipeline completo com Ollama (pulado se Ollama não estiver rodando)
 """
 
 from __future__ import annotations
 
 import hashlib
+import urllib.request
 from pathlib import Path
 
 import pytest
@@ -24,9 +26,18 @@ from src.config_loader import load_config
 from src.domain.entities import Chunk
 from src.domain.ports import LLMPort
 from src.infrastructure.embeddings.sentence_transformer_embedder import SentenceTransformerEmbedder
+from src.infrastructure.llm.ollama_llm import OllamaLLM
 from src.infrastructure.reranking.cross_encoder_reranker import CrossEncoderReranker
 from src.infrastructure.storage.faiss_vector_store import FAISSVectorStore
 from src.infrastructure.storage.sqlite_metadata_store import SQLiteMetadataStore
+
+
+def _ollama_running() -> bool:
+    try:
+        urllib.request.urlopen("http://localhost:11434/api/tags", timeout=3)
+        return True
+    except Exception:
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -248,4 +259,101 @@ class TestCategoriaC:
         doc_ids = {c.document_id for c in chunks}
         assert len(doc_ids) >= 2, (
             f"esperado chunks de ao menos 2 documentos; recebido {doc_ids}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Pipeline completo com LLM real (Ollama)
+# Pulado automaticamente se Ollama não estiver rodando em localhost:11434.
+# Não há limite de tempo — cada pergunta pode levar até timeout_seconds (180s).
+# Verifica: resposta não vazia, out_of_scope=False, prompt_used preenchido.
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="module")
+def full_pipeline(search_uc: SearchChunks) -> GenerateAnswer:
+    """Pipeline completo com OllamaLLM real — requer Ollama rodando."""
+    if not _ollama_running():
+        pytest.skip("Ollama não está rodando em localhost:11434")
+    return GenerateAnswer(search_uc, PromptBuilder(), OllamaLLM())
+
+
+@pytest.mark.skipif(not _ollama_running(), reason="Ollama não está rodando em localhost:11434")
+class TestPipelineComLLM:
+    """Avaliação completa com geração de resposta real via llama3.2:3b.
+
+    Esses testes verificam que o pipeline end-to-end produz:
+      - resposta textual não vazia (LLM gerou algo)
+      - prompt_used preenchido (rastreabilidade obrigatória pelo enunciado)
+      - out_of_scope=False para perguntas cobertas pelos PDFs
+      - fonte correta no campo sources (mesmo critério da Categoria A)
+    """
+
+    def test_credito_pessoas_fisicas_resposta_llm(self, full_pipeline: GenerateAnswer) -> None:
+        answer = full_pipeline.execute(
+            "Qual foi a variação percentual da carteira de crédito a pessoas físicas "
+            "no Paraná entre junho de 2024 e junho de 2025?"
+        )
+        assert not answer.out_of_scope
+        assert answer.text.strip(), "LLM retornou resposta vazia"
+        assert answer.prompt_used.strip(), "prompt_used não foi preenchido"
+        assert answer.sources, "nenhuma fonte retornada"
+        doc_ids = {c.document_id for c in answer.sources}
+        assert _DOC_CONJUNTURAL in doc_ids, (
+            f"fonte esperada: analise_conjuntural_2025; recebido: {doc_ids}"
+        )
+
+    def test_desocupacao_paraná_resposta_llm(self, full_pipeline: GenerateAnswer) -> None:
+        answer = full_pipeline.execute(
+            "Desde qual trimestre o Paraná registra taxa de desocupação inferior a 5%?"
+        )
+        assert not answer.out_of_scope
+        assert answer.text.strip()
+        assert answer.prompt_used.strip()
+        assert answer.sources
+        assert _DOC_CONJUNTURAL in {c.document_id for c in answer.sources}
+
+    def test_decomposicao_produtividade_resposta_llm(self, full_pipeline: GenerateAnswer) -> None:
+        answer = full_pipeline.execute(
+            "Quais são os componentes da decomposição da variação de produtividade "
+            "do trabalho analisados no estudo sobre o Paraná?"
+        )
+        assert not answer.out_of_scope
+        assert answer.text.strip()
+        assert answer.prompt_used.strip()
+        assert answer.sources
+        assert _DOC_DESENVOLVIMENTO in {c.document_id for c in answer.sources}
+
+    def test_protocolo_prisma_resposta_llm(self, full_pipeline: GenerateAnswer) -> None:
+        answer = full_pipeline.execute(
+            "Qual protocolo foi adotado para garantir a transparência e reprodutibilidade "
+            "da revisão de escopo de políticas públicas brasileiras?"
+        )
+        assert not answer.out_of_scope
+        assert answer.text.strip()
+        assert answer.prompt_used.strip()
+        assert answer.sources
+        assert _DOC_POLITICAS in {c.document_id for c in answer.sources}
+
+    def test_out_of_scope_nao_chama_llm_sem_contexto(self, full_pipeline: GenerateAnswer) -> None:
+        # Mesmo com LLM real conectada, o pipeline deve recusar perguntas fora do escopo
+        # sem gerar resposta — verifica que anti-alucinação funciona end-to-end
+        answer = full_pipeline.execute(
+            "Como funciona o protocolo de consenso Proof of Work utilizado no Bitcoin?"
+        )
+        assert answer.out_of_scope is True
+        assert answer.text == _OUT_OF_SCOPE_TEXT
+        assert answer.prompt_used == ""
+        assert answer.sources == []
+
+    def test_multi_doc_mercado_trabalho_resposta_llm(self, full_pipeline: GenerateAnswer) -> None:
+        answer = full_pipeline.execute(
+            "Qual é a situação do mercado de trabalho paranaense e como ele se relaciona "
+            "com a produtividade do trabalho no estado?"
+        )
+        assert not answer.out_of_scope
+        assert answer.text.strip()
+        assert answer.prompt_used.strip()
+        doc_ids = {c.document_id for c in answer.sources}
+        assert len(doc_ids) >= 2, (
+            f"pergunta multi-doc deve ter fontes de >= 2 documentos; recebido {doc_ids}"
         )

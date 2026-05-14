@@ -1,0 +1,13 @@
+[run]
+source = src
+omit =
+    # interface requer servidor + índice FAISS + Ollama no ar para ser testada —
+    # cobertura real é medida via run_evaluation.py (integração HTTP end-to-end)
+    src/interface/*
+
+[report]
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:
+    # corpo de método abstrato — nunca executado diretamente (requer subclasse)
+    ^\s*\.\.\.\s*$

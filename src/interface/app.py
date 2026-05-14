@@ -14,6 +14,9 @@ _cfg = load_config()
 # serviço api é alcançado pelo nome do serviço (http://api:8000) e não por localhost
 _API_URL = os.environ.get("API_BASE_URL", _cfg["api"]["base_url"]) + "/chat"
 
+# timeout generoso: cold start carrega embedder + FAISS + reranker + Ollama (~60-90s)
+_TIMEOUT = int(os.environ.get("CHAT_TIMEOUT", "300"))
+
 
 def _post_chat(question: str) -> dict:
     payload = json.dumps({"question": question}).encode()
@@ -23,7 +26,7 @@ def _post_chat(question: str) -> dict:
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=120) as resp:
+    with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
         return json.loads(resp.read().decode())
 
 
@@ -38,7 +41,7 @@ question = st.text_area(
 )
 
 if st.button("Enviar", disabled=not question.strip()):
-    with st.spinner("Consultando..."):
+    with st.spinner("Consultando… (primeira consulta pode levar até 2 minutos enquanto o modelo carrega)"):
         try:
             result = _post_chat(question.strip())
         except urllib.error.URLError as exc:
@@ -51,15 +54,19 @@ if st.button("Enviar", disabled=not question.strip()):
     else:
         st.write(result["answer"])
 
-    with st.expander("Prompt enviado à LLM"):
+    # Prompt enviado à LLM — exigido pelo enunciado como saída separada obrigatória
+    with st.expander("📄 Prompt enviado à LLM"):
         prompt = result.get("prompt_used", "")
         st.code(prompt if prompt else "(resposta fora do escopo — LLM não foi consultada)", language="text")
 
-    with st.expander("Fontes utilizadas"):
+    # Fontes utilizadas — trechos e documentos usados para enriquecer a resposta
+    with st.expander("📚 Fontes utilizadas"):
         sources = result.get("sources", [])
         if sources:
             for src in sources:
-                section_info = f", seção *{src['section']}*" if src.get("section") else ""
-                st.markdown(f"- **{src['document_id']}** — página {src['page']}{section_info}")
+                filename = src.get("filename") or src.get("document_id", "desconhecido")
+                section_info = f" › *{src['section']}*" if src.get("section") else ""
+                score_info = f"  `score: {src['score']:.4f}`" if "score" in src else ""
+                st.markdown(f"- **{filename}** — p. {src['page']}{section_info}{score_info}")
         else:
-            st.write("Nenhuma fonte.")
+            st.write("Nenhuma fonte (pergunta fora do escopo).")
