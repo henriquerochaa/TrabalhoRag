@@ -106,6 +106,33 @@ docker compose --profile full up --build
 
 ---
 
+## Setup no Linux Mint (sem PowerShell)
+
+Os passos de setup são idênticos, substituindo comandos PowerShell por bash:
+
+```bash
+# 1. Python 3.12 + venv
+python3.12 -m venv .venv
+source .venv/bin/activate
+
+# 2. Remover hf-xet antes de instalar (AVX-512 crash no i5-13500)
+pip install -r requirements.txt --no-cache-dir
+pip uninstall hf-xet -y
+
+# 3-6. Restante idêntico (comandos `python` funcionam igual)
+ollama pull llama3.2:3b
+python -m spacy download pt_core_news_lg
+python scripts/download_models.py
+python scripts/download_pdfs.py
+python ingest.py
+```
+
+> **`host.docker.internal` no Linux**: em distribuições Linux sem Docker Desktop,
+> esse hostname pode não resolver. O `docker-compose.yml` já inclui `extra_hosts`
+> para mapear `host.docker.internal → host-gateway` automaticamente.
+
+---
+
 ## API fora do Docker (desenvolvimento local)
 
 Se rodar a API diretamente com `uvicorn` no host (sem Docker),

@@ -173,13 +173,19 @@ pip install -r requirements.txt --no-cache-dir
 # Verificar versão instalada
 pip show faiss-cpu
 
-# Deve estar: Version: 1.7.4
-# Se tiver 1.13.2 ou outra:
+# Deve estar: Version: 1.9.0
+# Se tiver outra versão:
 pip uninstall faiss-cpu -y
-pip install faiss-cpu==1.7.4
+pip install faiss-cpu==1.9.0
 ```
 
-**Por quê?** `faiss-cpu 1.13.2` exige Intel AVX-512 (i5-13500 não tem). A v1.7.4 funciona com SSE4/AVX.
+**Por quê?** `faiss-cpu 1.7.4` foi removido do PyPI. `faiss-cpu 1.8.0` exige AVX-512 (i5-13500 não tem). `faiss-cpu 1.9.0` é a primeira versão compatível com numpy≥2.0 e sem exigência de AVX-512.
+
+**⚠️ CRÍTICO**: Remover hf-xet antes de `download_models.py`:
+```powershell
+pip uninstall hf-xet -y
+```
+**Por quê?** `hf-xet` é um acelerador de download instalado automaticamente pelo `huggingface_hub`. A versão atual exige AVX-512 → crash fatal ao baixar modelos no i5-13500.
 
 ---
 
@@ -521,11 +527,39 @@ curl http://localhost:11434/api/tags  # testar conectividade
 
 **Erro**: `Fatal Error: HW capability found: 0xFFCBFBFF, but HW capability requested: 0x200000`
 
+**Causa**: `faiss-cpu==1.8.0` exige AVX-512 (ausente no i5-13500). `faiss-cpu==1.7.4` foi removido do PyPI.
+
 **Solução**:
 ```powershell
 pip uninstall faiss-cpu -y
-pip install faiss-cpu==1.7.4
+pip install faiss-cpu==1.9.0
 ```
+
+### ❌ hf-xet crash (AVX-512 no download de modelos)
+
+**Erro**: `Fatal Error: HW capability found: 0xFFCBFBFF, but HW capability requested: 0x200000` durante `download_models.py`
+
+**Causa**: `hf-xet` (acelerador de download do HuggingFace) exige AVX-512.
+
+**Solução**:
+```powershell
+pip uninstall hf-xet -y
+python scripts/download_models.py  # agora usa HTTP padrão, funciona normalmente
+```
+
+### ❌ Ollama HTTP 500 / cudaMalloc OOM
+
+**Erro**: `HTTP 500` do Ollama, logs mostram `cudaMalloc failed: out of memory` ou `unable to allocate CUDA_Host buffer`
+
+**Causa**: `SentenceTransformer` detecta GPU (ex.: RTX 3050) automaticamente e ocupa toda a VRAM, impedindo o Ollama de alocar memória.
+
+**Solução já aplicada no código** (`sentence_transformer_embedder.py`):
+```python
+os.environ["CUDA_VISIBLE_DEVICES"] = ""   # oculta GPU do PyTorch completamente
+# ...
+self._model = SentenceTransformer(model_name, device="cpu")  # garante CPU
+```
+Se o erro persistir, verificar que `CUDA_VISIBLE_DEVICES=""` está no topo do arquivo antes de qualquer import.
 
 ### ❌ Timeout atingido
 
@@ -614,7 +648,7 @@ python scripts/run_evaluation.py      # 11 perguntas OK
 # - max_tokens: 150
 
 # Garantir requirements.txt tem:
-# - faiss-cpu==1.7.4
+# - faiss-cpu==1.9.0  (1.7.4 removido do PyPI; 1.8.0 exige AVX-512)
 # - Sem torch CUDA
 # - Sem dependências GPU
 ```
@@ -640,7 +674,7 @@ rag-ipardes.zip
 ├─ models/                           (embedder + reranker pré-downloaded)
 ├─ config.yaml                       (llama3.2:3b, timeout 180s, CPU-only)
 ├─ docker-compose.yml
-├─ requirements.txt                  (faiss-cpu==1.7.4, CPU-only)
+├─ requirements.txt                  (faiss-cpu==1.9.0, CPU-only)
 ├─ CLAUDE.md                         (este arquivo)
 └─ README.md                         (instruções PowerShell)
 ```
@@ -690,7 +724,8 @@ Se você quer acelerar desenvolvimento:
 
 ### Ambiente
 - [ ] Python 3.12 + venv criado
-- [ ] faiss-cpu==1.7.4 instalado (verificar com `pip show`)
+- [ ] faiss-cpu==1.9.0 instalado (verificar com `pip show faiss-cpu`)
+- [ ] hf-xet removido: `pip uninstall hf-xet -y` (crash AVX-512 no i5-13500)
 - [ ] Ollama instalado e funcionando (`ollama serve`)
 - [ ] `ollama pull llama3.2:3b` completo
 
@@ -739,7 +774,7 @@ rag-ipardes.zip
 ├─ models/                      (pesos embedding + reranker)
 ├─ config.yaml                  (SEM URLs, SEM paths absolutos)
 ├─ docker-compose.yml
-├─ requirements.txt             (faiss-cpu==1.7.4)
+├─ requirements.txt             (faiss-cpu==1.9.0)
 ├─ CLAUDE.md                    (este arquivo)
 └─ README.md                    (setup vs runtime bem separado)
 ```
@@ -765,4 +800,16 @@ python scripts/run_evaluation.py
 
 
 
-Próximos passos: Executa os comandos na ordem do checklist acima.
+---
+
+## Decisões Técnicas Críticas Tomadas
+
+| Problema | Solução | Motivo |
+|---|---|---|
+| `faiss-cpu==1.7.4` removido do PyPI | Usar `1.9.0` | Primeira versão sem AVX-512 e compatível com numpy≥2.0 |
+| `hf-xet` crash AVX-512 | `pip uninstall hf-xet -y` | Acelerador de download exige AVX-512 (ausente no i5-13500) |
+| Ollama HTTP 500 / cudaMalloc OOM | `CUDA_VISIBLE_DEVICES=""` + `device="cpu"` | SentenceTransformer tomava toda a VRAM impedindo o Ollama |
+| Prompt excede 2048 tokens (default Ollama) | `num_ctx: 8192` no payload | Ollama usa 2048 por padrão; PDFs do IPARDES geram prompts maiores |
+| `processor_config.json` não existe no e5-large | Arquivo `{}` vazio em `models/` | sentence-transformers 5.5.0 tenta buscar esse arquivo → falha offline |
+
+Próximos passos: Execute os comandos na ordem do checklist acima. Ver `AFAZER.md` para tarefas pendentes.
