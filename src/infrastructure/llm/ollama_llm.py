@@ -29,6 +29,9 @@ class OllamaLLM(LLMPort):
         self._temperature: float = cfg["temperature"]
         self._timeout: int = cfg["timeout_seconds"]
         self._max_retries: int = cfg["max_retries"]
+        # num_ctx precisa ser explicitado: Ollama usa 2048 por padrão para llama3.2:3b,
+        # mas nosso prompt com chunks do PDF pode ultrapassar esse limite → HTTP 500.
+        self._context_window: int = cfg["context_window"]
 
     def generate(self, prompt: str) -> str:
         payload = json.dumps({
@@ -38,6 +41,7 @@ class OllamaLLM(LLMPort):
             "options": {
                 "temperature": self._temperature,
                 "num_predict": self._max_tokens,
+                "num_ctx": self._context_window,
             },
         }).encode()
 
