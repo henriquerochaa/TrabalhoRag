@@ -9,12 +9,11 @@ paths:
   models: "models/"
 
 chunking:
-  # chunk_size=256: chunks menores têm menos diluição de conteúdo → score cosine mais alto.
-  # Com 512, um chunk mistura vários tópicos → embedding "médio" afasta-se da query específica.
-  # Com 256, o chunk cobre uma ideia central → embedding mais próximo de queries diretas.
-  chunk_size: 256
-  # overlap=64: mantém 25% de sobreposição (64/256) — preserva contexto entre chunks adjacentes
-  # sem duplicar tanto conteúdo quanto overlap=128 faria (50%).
+  # chunk_size=512: chunks maiores preservam mais contexto por unidade → embedding mais rico
+  # e score cosine mais alto que chunks menores (256), que ficam fragmentados demais e perdem
+  # alinhamento semântico com a query. Testado empiricamente: 512 > 256 nos scores FAISS.
+  chunk_size: 512
+  # overlap=64: ~12% de sobreposição — preserva contexto entre chunks adjacentes sem duplicar.
   overlap: 64
   # linhas repetidas em >= threshold_ratio das páginas são descartadas como cabeçalho/rodapé
   header_frequency_threshold: 0.30
