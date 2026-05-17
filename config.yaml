@@ -9,7 +9,12 @@ paths:
   models: "models/"
 
 chunking:
-  chunk_size: 512
+  # chunk_size=256: chunks menores têm menos diluição de conteúdo → score cosine mais alto.
+  # Com 512, um chunk mistura vários tópicos → embedding "médio" afasta-se da query específica.
+  # Com 256, o chunk cobre uma ideia central → embedding mais próximo de queries diretas.
+  chunk_size: 256
+  # overlap=64: mantém 25% de sobreposição (64/256) — preserva contexto entre chunks adjacentes
+  # sem duplicar tanto conteúdo quanto overlap=128 faria (50%).
   overlap: 64
   # linhas repetidas em >= threshold_ratio das páginas são descartadas como cabeçalho/rodapé
   header_frequency_threshold: 0.30
@@ -38,8 +43,10 @@ faiss:
   m: 32
   # ef_construction=200: valor padrão recomendado — grafo de qualidade sem overhead excessivo
   ef_construction: 200
-  # ef_search=64: troca recall por latência; aumentar para 128 melhora ~1% recall a 2x custo
-  ef_search: 64
+  # ef_search=128: explora mais caminhos no grafo HNSW por busca → recall ~2% melhor que 64.
+  # Custo: ~2x mais comparações por query (~5ms extra em CPU), aceitável dado que o gargalo
+  # real é o Ollama (~360s). Para corpus pequeno (~5000 chunks) o overhead é desprezível.
+  ef_search: 128
 
 llm:
   # llama3.2:3b escolhido para execução em CPU puro (sem GPU):
