@@ -30,9 +30,9 @@ python scripts/download_pdfs.py
 python ingest.py
 ```
 
-> **Torch CPU-only** (opcional, download menor ~200 MB):
+> **Torch CPU-only** (opcional, download menor):
 > ```bash
-> pip install torch==2.11.0 --index-url https://download.pytorch.org/whl/cpu
+> pip install torch --index-url https://download.pytorch.org/whl/cpu
 > ```
 
 > **Atenção — hf-xet (AVX-512):** Se o comando `python scripts/download_models.py` terminar com
@@ -172,14 +172,19 @@ src/
   application/            # Use cases — orquestração via ports
   infrastructure/         # Implementações concretas (PDF, embeddings, FAISS, LLM)
   interface/              # FastAPI (api.py) + Streamlit (app.py)
-tests/
+tests/                      # 186 testes unitários
   test_pymupdf_extractor.py
   test_text_cleaner.py
   test_chunking.py
+  test_embedder.py
   test_vector_store.py
-  test_search_chunks.py
+  test_mmr.py
+  test_reranker.py
+  test_search_chunks.py   # pipeline combinado: cross-encoder em todos → #1 garantido + MMR
+  test_prompt_builder.py
   test_generate_answer.py
-  test_ollama_llm.py      # Retry/backoff + fallback de indisponibilidade
+  test_ingest_documents.py
+  test_ollama_llm.py      # retry/backoff + fallback de indisponibilidade
   test_evaluation.py      # 11 perguntas end-to-end (A: por doc, B: out-of-scope, C: multi-doc)
 data/
   raw/                    # PDFs originais (baixados no setup, incluídos no ZIP de entrega)

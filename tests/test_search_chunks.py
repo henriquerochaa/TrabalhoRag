@@ -64,11 +64,17 @@ def _make_sc(store: VectorStorePort, reranker: RerankerPort | None = None) -> Se
 # ---------------------------------------------------------------------------
 
 class TestRerankerChangesOrder:
-    def test_reranker_overrides_faiss_order(self) -> None:
+    def test_reranker_top1_is_always_reranker_choice(self) -> None:
+        # Pipeline novo: cross-encoder roda em TODOS os candidatos do FAISS antes
+        # de qualquer seleção. Garante que o #1 retornado seja sempre o #1 do
+        # reranker — nunca o #1 do FAISS, que usa cosine similarity e pode rankear
+        # chunks superficialmente similares acima do chunk com a resposta real.
+        #
         # FAISS retorna A(0.90) > B(0.80) > C(0.70).
-        # Com embeddings ortogonais, MMR preserva essa ordem (diversity = 0).
-        # _ReversingReranker inverte para [C, B, A].
-        # Se o reranker fosse ignorado, resultado seria [A, B, C].
+        # _ReversingReranker inverte para [C, B, A] → #1 garantido = C.
+        # Slots 2 e 3 são preenchidos pelo MMR usando scores FAISS dos restantes
+        # [B(0.80), A(0.90)] → MMR seleciona A(0.90) depois B(0.80).
+        # Resultado esperado: [C, A, B].
         chunks = [_chunk("A"), _chunk("B"), _chunk("C")]
         results = [
             SearchResult(chunks[0], score=0.90),
@@ -85,8 +91,12 @@ class TestRerankerChangesOrder:
         returned, out_of_scope = _make_sc(FixedStore(), _ReversingReranker()).execute("query")
 
         assert out_of_scope is False
-        assert [c.id for c in returned] == ["C", "B", "A"], (
-            f"esperado ordem do reranker [C, B, A], obtido {[c.id for c in returned]}"
+        assert returned[0].id == "C", (
+            f"#1 deve ser escolha do reranker (C), obtido {returned[0].id}"
+        )
+        assert [c.id for c in returned] == ["C", "A", "B"], (
+            f"esperado [C, A, B] (reranker garante #1, MMR preenche restantes), "
+            f"obtido {[c.id for c in returned]}"
         )
 
     def test_passthrough_reranker_preserves_mmr_order(self) -> None:
@@ -108,9 +118,10 @@ class TestRerankerChangesOrder:
 
         assert [c.id for c in returned] == ["X", "Y", "Z"]
 
-    def test_reranker_receives_mmr_subset_not_full_faiss(self) -> None:
-        # Reranker deve receber apenas top_k_final chunks do MMR, não todos os
-        # top_k_initial do FAISS — store retorna 3, reranker deve ver 3.
+    def test_reranker_receives_all_faiss_candidates(self) -> None:
+        # Reranker recebe TODOS os candidatos do FAISS (top_k_initial), não apenas
+        # o subset pós-MMR — é exatamente isso que garante que o #1 do cross-encoder
+        # nunca seja eliminado pela pressão de diversidade do MMR antes de ser visto.
         received: list[Chunk] = []
 
         class CapturingReranker(RerankerPort):

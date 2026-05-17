@@ -54,7 +54,7 @@ llm:
   max_tokens: 150
   context_window: 8192
   # timeout_seconds=180: margem segura para CPU i5-13500; gemma2:9b precisaria de 480+
-  timeout_seconds: 180
+  timeout_seconds: 360
   max_retries: 3
 
 api:

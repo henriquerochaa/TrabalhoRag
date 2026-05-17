@@ -60,16 +60,31 @@ class SearchChunks:
         if not results or results[0].score < self._threshold:
             return [], True
 
-        diverse = self._mmr(query_emb, results, self._top_k_final, self._lambda_mmr)
-
         # score_map preserva a similaridade cosine do FAISS por chunk_id.
         # O reranker (cross-encoder) apenas reordena — não recalcula scores FAISS;
         # usar o score do reranker seria incomparável entre queries diferentes
         # porque a escala do cross-encoder não é normalizada entre 0 e 1.
-        score_map: dict[str, float] = {r.chunk.id: r.score for r in diverse}
+        score_map: dict[str, float] = {r.chunk.id: r.score for r in results}
+        id_to_result: dict[str, SearchResult] = {r.chunk.id: r for r in results}
 
-        reranked: list[Chunk] = self._reranker.rerank(query, [r.chunk for r in diverse])
-        compressed = self._compress_to_context(reranked[: self._top_k_final])
+        # Cross-encoder aplicado em TODOS os top_k_initial candidatos garante que
+        # o chunk #1 seja o mais relevante semanticamente — cosine similarity pode
+        # rankear chunks superficialmente similares (mesma seção, palavras comuns)
+        # acima do chunk que contém a resposta real. O cross-encoder analisa query
+        # e chunk em conjunto (atenção cruzada), capturando relevância contextual
+        # que o modelo de embedding (distância vetorial) não detecta.
+        reranked_all: list[Chunk] = self._reranker.rerank(query, [r.chunk for r in results])
+
+        top1 = reranked_all[0]
+
+        # MMR seleciona os slots restantes (2..top_k_final) excluindo o #1 já
+        # garantido — preserva diversidade multi-documento sem arriscar descartar
+        # o chunk mais relevante por pressão de diversidade do MMR.
+        remaining = [id_to_result[c.id] for c in reranked_all[1:] if c.id in id_to_result]
+        diverse_rest = self._mmr(query_emb, remaining, self._top_k_final - 1, self._lambda_mmr)
+
+        final_chunks = [top1] + [r.chunk for r in diverse_rest]
+        compressed = self._compress_to_context(final_chunks[: self._top_k_final])
 
         for chunk in compressed:
             chunk.score = score_map.get(chunk.id, 0.0)
