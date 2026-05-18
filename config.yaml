@@ -48,9 +48,8 @@ faiss:
   ef_search: 128
 
 llm:
-  # llama3.2:3b escolhido para execução em CPU puro (sem GPU):
-  # gemma2:9b exige ~6 GB VRAM para inferência rápida; em CPU puro demora > 5 min por resposta.
-  # llama3.2:3b (~2 GB RAM) gera resposta em 8-12s no i5-13500 sem GPU — viável para avaliação.
+  # llama3.2:3b: modelo escolhido para desenvolvimento e entrega — 3B parâmetros (~2 GB RAM),
+  # compatível com CPU puro. Resposta em 8-12s no i5-13500 sem GPU.
   model: "llama3.2:3b"
   # localhost:11434 para Ollama nativo no host (sem Docker).
   # Se rodar dentro de container Docker, sobrescrever com API_BASE_URL=http://host.docker.internal:11434
@@ -59,7 +58,7 @@ llm:
   # max_tokens=150: resposta curta reduz o tempo de decode em CPU (~40% mais rápido que 512)
   max_tokens: 150
   context_window: 8192
-  # timeout_seconds=180: margem segura para CPU i5-13500; gemma2:9b precisaria de 480+
+  # timeout_seconds=360: margem segura para CPU puro — observado empiricamente ~300s em hardware lento
   timeout_seconds: 360
   max_retries: 3
 

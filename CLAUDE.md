@@ -13,9 +13,9 @@
 - ✅ `TRANSFORMERS_OFFLINE=1` em todo arquivo que carrega modelo HuggingFace
 
 ### 2. LLM Máximo 9.9B Parâmetros
-- ✅ `llama3.2:3b` — 3B parâmetros (desenvolvimento em CPU)
-- ✅ Nunca usar `gemma2:9b` ou qualquer modelo > 9.9B
-- ⚠️ Se precisar modelo melhor: `mistral-7b` (7B) é alternativa válida
+- ✅ `llama3.2:3b` — modelo escolhido para desenvolvimento **e entrega** (decisão do grupo)
+- ✅ Nunca usar qualquer modelo > 9.9B
+- ❌ `gemma2:9b` — descartado pelo grupo
 
 ### 3. Apenas os 3 PDFs do IPARDES
 - ✅ Fonte única: `scripts/download_pdfs.py`
